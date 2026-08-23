@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.mac-kiosk-display</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>HOME_PLACEHOLDER/.local/mac-kiosk-display/venv/bin/python3</string>
+    <string>-u</string>
+    <string>HOME_PLACEHOLDER/.local/mac-kiosk-display/scripts/kiosk_server.py</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>HOME_PLACEHOLDER/.local/mac-kiosk-display</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>HOME_PLACEHOLDER/Library/Logs/mac-kiosk-display.log</string>
+  <key>StandardErrorPath</key>
+  <string>HOME_PLACEHOLDER/Library/Logs/mac-kiosk-display.log</string>
+  <key>ProcessType</key>
+  <string>Interactive</string>
+  <key>LimitLoadToSessionType</key>
+  <string>Aqua</string>
+</dict>
+</plist>

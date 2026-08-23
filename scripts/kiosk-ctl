@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# On the Mac (or via: ssh HOST kiosk-ctl ...). Uses a Unix socket, not TCP.
+set -euo pipefail
+SOCK="${KIOSK_SOCK:-$HOME/.local/state/mac-kiosk-display/kiosk.sock}"
+TOKEN="${KIOSK_TOKEN:-}"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  kiosk-ctl show <url|file> [--until tonight|HH:MM|SECONDS]
+  kiosk-ctl clear | wake | dismiss | status | health
+EOF
+}
+
+req() {
+  local method="$1" path="$2" data="${3:-}"
+  local args=(-fsS --unix-socket "$SOCK" -X "$method" --max-time 15)
+  [ -n "$TOKEN" ] && args+=(-H "Authorization: Bearer ${TOKEN}")
+  if [ -n "$data" ]; then
+    args+=(-H "Content-Type: application/json" -d "$data")
+  fi
+  curl "${args[@]}" "http://kiosk${path}"
+}
+
+cmd="${1:-}"
+shift || true
+case "$cmd" in
+  show)
+    target="${1:-}"; [ -n "$target" ] || { usage; exit 2; }; shift || true
+    until=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --until) until="${2:-}"; shift 2 ;;
+        *) echo "unknown arg: $1" >&2; exit 2 ;;
+      esac
+    done
+    payload=$(python3 -c 'import json,sys; print(json.dumps({"url":sys.argv[1],"until":sys.argv[2] or None}))' "$target" "$until")
+    req POST /show "$payload"; echo
+    ;;
+  clear) req POST /clear "{}"; echo ;;
+  wake) req POST /wake "{}"; echo ;;
+  dismiss) req POST /dismiss "{}"; echo ;;
+  snapshot) req POST /snapshot "{}"; echo ;;
+  status) req GET /status; echo ;;
+  health) req GET /health; echo ;;
+  -h|--help|"") usage; exit 0 ;;
+  *) usage; exit 2 ;;
+esac
