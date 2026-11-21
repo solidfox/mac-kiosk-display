@@ -95,6 +95,10 @@ class KioskUI(NSObject, protocols=[objc.protocolNamed("WKScriptMessageHandler")]
 
     # ---- display power: the shown page, or kiosk-ctl, decides; this process executes ----
     def userContentController_didReceiveScriptMessage_(self, _controller, message):
+        frame = message.frameInfo()
+        if frame is not None and not frame.isMainFrame():
+            log("bridge ignored: not the main frame")
+            return
         raw = message.body()  # an NSDictionary or NSString, not a Python dict
         try:
             body = dict(raw)
@@ -104,7 +108,8 @@ class KioskUI(NSObject, protocols=[objc.protocolNamed("WKScriptMessageHandler")]
         if want not in ("on", "off"):
             log(f"bridge ignored {body!r}")
             return
-        self.set_display(want == "on", "page", why=str(body.get("why", "")))
+        why = "".join(ch for ch in str(body.get("why", ""))[:120] if ch.isprintable())
+        self.set_display(want == "on", "page", why=why)
 
     def set_display(self, on: bool, by: str, why: str = ""):
         now = time.time()
