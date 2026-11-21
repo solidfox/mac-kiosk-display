@@ -14,6 +14,7 @@ STATE_FILE = STATE_DIR / "state.json"
 UI_PID_FILE = STATE_DIR / "ui.pid"
 CAFF_PID_FILE = STATE_DIR / "caffeinate.pid"
 SOCK_PATH = STATE_DIR / "kiosk.sock"
+DISPLAY_FILE = STATE_DIR / "display.json"
 
 
 def log(msg: str) -> None:
@@ -85,7 +86,9 @@ def stop_pidfile(path: Path) -> None:
 
 def start_caffeinate(seconds: int | None) -> None:
     stop_pidfile(CAFF_PID_FILE)
-    cmd = ["/usr/bin/caffeinate", "-d", "-u"]
+    # -d: no idle display sleep while a page is shown (the page may still ask for display_sleep)
+    # -i: no idle system sleep either, so the page keeps running while the panel is dark
+    cmd = ["/usr/bin/caffeinate", "-d", "-i", "-u"]
     if seconds and seconds > 0:
         cmd.extend(["-t", str(int(seconds))])
     import subprocess
@@ -99,3 +102,24 @@ def wake_display() -> None:
     import subprocess
 
     subprocess.run(["/usr/bin/caffeinate", "-u", "-t", "3"], check=False)
+
+
+def sleep_display() -> None:
+    """Put the panel to sleep now. caffeinate -d only prevents *idle* sleep, so this sticks
+    until wake_display() or real user input."""
+    import subprocess
+
+    subprocess.run(["/usr/bin/pmset", "displaysleepnow"], check=False)
+
+
+def display_power_state() -> int | None:
+    """IODisplayWrangler power state: 4 = on, 1 = asleep. None when unreadable."""
+    import re
+    import subprocess
+
+    out = subprocess.run(
+        ["/usr/sbin/ioreg", "-n", "IODisplayWrangler", "-r", "-d1"],
+        capture_output=True, text=True, check=False,
+    ).stdout
+    m = re.search(r'"CurrentPowerState"=(\d)', out)
+    return int(m.group(1)) if m else None

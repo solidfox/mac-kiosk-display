@@ -18,20 +18,36 @@ from AppKit import (
     NSApplicationPresentationHideDock,
     NSApplicationPresentationHideMenuBar,
 )
+import objc
 from Foundation import NSObject, NSURL, NSURLRequest
 from PyObjCTools import AppHelper
 from WebKit import WKWebView, WKWebViewConfiguration
 
-from kiosk_lib import CMD_FILE, STATE_FILE, log, read_json, write_json
+from kiosk_lib import (
+    CMD_FILE,
+    DISPLAY_FILE,
+    STATE_FILE,
+    log,
+    read_json,
+    sleep_display,
+    wake_display,
+    write_json,
+)
 
 SCREENSAVER_LEVEL = 1000
 APPS = ("Preview", "Safari", "System Settings", "Google Chrome", "Chromium")
+# A page that asked for the panel to sleep must say so again within this time, or the panel
+# wakes on its own: a wedged page never leaves the kitchen dark.
+DISPLAY_OFF_RENEW_S = 15 * 60
+BRIDGE_NAME = "kiosk"  # window.webkit.messageHandlers.kiosk.postMessage({display: "on"|"off"})
 
 
-class KioskUI(NSObject):
+class KioskUI(NSObject, protocols=[objc.protocolNamed("WKScriptMessageHandler")]):
     window = None
     webview = None
     last_ts = 0.0
+    display_on = True
+    display_asked_at = 0.0
 
     def applicationDidFinishLaunching_(self, _n):
         screen = NSScreen.mainScreen().frame()
@@ -46,6 +62,7 @@ class KioskUI(NSObject):
         win.setLevel_(SCREENSAVER_LEVEL)
         win.orderOut_(None)
         config = WKWebViewConfiguration.alloc().init()
+        config.userContentController().addScriptMessageHandler_name_(self, BRIDGE_NAME)
         view = WKWebView.alloc().initWithFrame_configuration_(screen, config)
         win.setContentView_(view)
         self.window = win
@@ -60,6 +77,7 @@ class KioskUI(NSObject):
         ts = float(cmd.get("ts") or 0)
         if ts <= self.last_ts:
             self._maybe_expire()
+            self._display_watchdog()
             return
         self.last_ts = ts
         action = cmd.get("action")
@@ -72,6 +90,42 @@ class KioskUI(NSObject):
             self.dismiss_(None)
         elif action == "snapshot":
             self.snapshot_(cmd)
+        elif action == "display":
+            self.set_display(bool(cmd.get("on", True)), str(cmd.get("by") or "ctl"))
+
+    # ---- display power: the shown page, or kiosk-ctl, decides; this process executes ----
+    def userContentController_didReceiveScriptMessage_(self, _controller, message):
+        raw = message.body()  # an NSDictionary or NSString, not a Python dict
+        try:
+            body = dict(raw)
+        except (TypeError, ValueError):
+            body = {"display": str(raw)}
+        want = str(body.get("display", ""))
+        if want not in ("on", "off"):
+            log(f"bridge ignored {body!r}")
+            return
+        self.set_display(want == "on", "page", why=str(body.get("why", "")))
+
+    def set_display(self, on: bool, by: str, why: str = ""):
+        now = time.time()
+        if on == self.display_on:
+            if not on:
+                self.display_asked_at = now  # the page renewed its request
+            return
+        self.display_on = on
+        self.display_asked_at = now
+        log(f"display {'on' if on else 'off'} by {by} {why}".rstrip())
+        if on:
+            wake_display()
+        else:
+            sleep_display()
+        write_json(DISPLAY_FILE, {"on": on, "by": by, "why": why, "since": now})
+
+    def _display_watchdog(self):
+        if self.display_on:
+            return
+        if time.time() - self.display_asked_at > DISPLAY_OFF_RENEW_S:
+            self.set_display(True, "watchdog", why="no renewal from the page")
 
     def _maybe_expire(self):
         state = read_json(STATE_FILE, {})
@@ -81,6 +135,7 @@ class KioskUI(NSObject):
             write_json(STATE_FILE, {"showing": False})
 
     def show_(self, cmd):
+        self.set_display(True, "show")
         local = cmd.get("local")
         url = cmd.get("url")
         if local:
@@ -102,6 +157,7 @@ class KioskUI(NSObject):
         )
 
     def clear_(self, _n):
+        self.set_display(True, "clear")
         self.window.orderOut_(None)
         NSApplication.sharedApplication().setPresentationOptions_(0)
         self.webview.loadRequest_(

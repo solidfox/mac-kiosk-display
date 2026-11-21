@@ -15,6 +15,7 @@ from pathlib import Path
 from kiosk_lib import (
     CAFF_PID_FILE,
     CMD_FILE,
+    DISPLAY_FILE,
     SOCK_PATH,
     STATE_FILE,
     UI_PID_FILE,
@@ -103,6 +104,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if self.path == "/status":
             state = read_json(STATE_FILE, {"showing": False})
+            state["display"] = read_json(DISPLAY_FILE, {"on": True, "by": "unknown"})
             state["ui"] = _ui_alive()
             state["socket"] = str(SOCK_PATH)
             state["pid"] = os.getpid()
@@ -122,6 +124,17 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/wake":
             wake_display()
             self._json(200, {"ok": True, "woke": True})
+            return
+        if self.path == "/display":
+            # {"on": true|false}: sleep or wake the panel. The UI process applies it, so the
+            # same watchdog (wake when the page goes quiet) covers both this and the page bridge.
+            on = data.get("on")
+            if not isinstance(on, bool):
+                self._json(400, {"error": "on must be true or false"})
+                return
+            _ensure_ui()
+            _push_cmd("display", on=on, by="ctl")
+            self._json(200, {"ok": True, "display": {"on": on}})
             return
         if self.path == "/show":
             target = data.get("url") or data.get("path") or data.get("file")

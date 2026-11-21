@@ -8,7 +8,7 @@ PY="${KIOSK_PYTHON:-/usr/local/bin/python3}"
 [ -x "$PY" ] || PY="$(command -v python3)"
 
 mkdir -p "$PREFIX/scripts" "$HOME/Library/LaunchAgents" "$HOME/Library/Logs" "$HOME/bin"
-cp -f "$SRC/scripts/kiosk_server.py" "$PREFIX/scripts/"
+cp -f "$SRC/scripts/kiosk_server.py" "$SRC/scripts/kiosk_ui.py" "$SRC/scripts/kiosk_lib.py" "$PREFIX/scripts/"
 cp -f "$SRC/scripts/kiosk-ctl" "$PREFIX/scripts/"
 chmod +x "$PREFIX/scripts/kiosk-ctl" "$PREFIX/scripts/kiosk_server.py"
 ln -sfn "$PREFIX/scripts/kiosk-ctl" "$HOME/bin/kiosk-ctl"

@@ -8,7 +8,8 @@ usage() {
   cat <<'EOF'
 Usage:
   kiosk-ctl show <url|file> [--until tonight|HH:MM|SECONDS]
-  kiosk-ctl clear | wake | dismiss | status | health
+  kiosk-ctl display on|off
+  kiosk-ctl clear | wake | dismiss | snapshot | status | health
 EOF
 }
 
@@ -36,6 +37,13 @@ case "$cmd" in
     done
     payload=$(python3 -c 'import json,sys; print(json.dumps({"url":sys.argv[1],"until":sys.argv[2] or None}))' "$target" "$until")
     req POST /show "$payload"; echo
+    ;;
+  display)
+    case "${1:-}" in
+      on) req POST /display '{"on": true}'; echo ;;
+      off) req POST /display '{"on": false}'; echo ;;
+      *) usage; exit 2 ;;
+    esac
     ;;
   clear) req POST /clear "{}"; echo ;;
   wake) req POST /wake "{}"; echo ;;

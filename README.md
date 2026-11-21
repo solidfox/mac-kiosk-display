@@ -31,6 +31,7 @@ kiosk-ctl show https://example.com --until tonight
 kiosk-ctl show ~/Cards/recipe.html --until 22:30
 kiosk-ctl dismiss    # quit leftover Preview/Safari/System Settings
 kiosk-ctl snapshot   # PNG of the WKWebView
+kiosk-ctl display off  # sleep the panel (the page keeps running); `on` wakes it
 kiosk-ctl status
 kiosk-ctl clear
 ```
@@ -61,6 +62,23 @@ curl --unix-socket "$HOME/.local/state/mac-kiosk-display/kiosk.sock" http://kios
 | POST | `/wake` | `{}` |
 | POST | `/dismiss` | `{}` |
 | POST | `/snapshot` | `{"path":"optional.png"}` |
+| POST | `/display` | `{"on":false}` sleeps the panel, `{"on":true}` wakes it |
+
+## Display power
+
+The kiosk holds `caffeinate -d -i`, so neither the panel nor the Mac idles to
+sleep while a page is shown. A page may still ask for the panel to sleep (an LCD
+showing black keeps its backlight lit): from JavaScript
+
+```js
+window.webkit.messageHandlers.kiosk.postMessage({ display: "off", why: "nobody here" });
+window.webkit.messageHandlers.kiosk.postMessage({ display: "on" });
+```
+
+or from the shell, `kiosk-ctl display off|on`. A page that asked for "off" must
+repeat it within 15 minutes or the panel wakes on its own, so a wedged page never
+leaves the room dark. A new `show` or `clear` wakes it too. `kiosk-ctl status`
+reports the last decision under `display`.
 
 Optional `KIOSK_TOKEN` → `Authorization: Bearer …`.
 
